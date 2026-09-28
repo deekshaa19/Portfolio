@@ -1,0 +1,37 @@
+name: Update LeetCode data
+on:
+  schedule:
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch LeetCode calendar
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, datetime
+          USER = "C5hckw2YPk"
+          q = "query($u:String!){matchedUser(username:$u){userCalendar{submissionCalendar}}}"
+          req = urllib.request.Request(
+              "https://leetcode.com/graphql",
+              data=json.dumps({"query": q, "variables": {"u": USER}}).encode(),
+              headers={"Content-Type": "application/json", "Referer": "https://leetcode.com", "User-Agent": "Mozilla/5.0"})
+          try:
+              r = json.load(urllib.request.urlopen(req, timeout=30))
+              cal = json.loads(r["data"]["matchedUser"]["userCalendar"]["submissionCalendar"])
+              out = {datetime.datetime.utcfromtimestamp(int(k)).strftime("%Y-%m-%d"): v for k, v in cal.items()}
+              json.dump(out, open("leetcode.json", "w"), indent=1)
+              print("saved", len(out), "days")
+          except Exception as e:
+              print("skipped:", e)
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name "leetcode-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add leetcode.json || true
+          git diff --cached --quiet || (git commit -m "Update LeetCode data" && git push)
